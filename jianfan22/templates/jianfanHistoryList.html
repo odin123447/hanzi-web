@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>查询历史记录 · 汉字字形演变信息管理系统</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/static/css/base.css">
+    <style>
+        body {
+            font-family: "PingFang SC", "Microsoft Yahei", system-ui, -apple-system, sans-serif;
+            color: var(--ink);
+            line-height: 1.75;
+            min-height: 100vh;
+            background:
+                radial-gradient(900px 420px at 8% -10%, #fff8ea 0%, rgba(255, 248, 234, 0) 62%),
+                radial-gradient(760px 420px at 94% 4%, #f1eade 0%, rgba(241, 234, 222, 0) 58%),
+                var(--paper);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        a { color: inherit; }
+
+        /* ============ 顶部导航 ============ */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: rgba(246, 242, 233, .85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--line);
+        }
+        .navbar-inner {
+            max-width: 1060px;
+            margin: 0 auto;
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .page-head {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 26px;
+        }
+        .page-head h1 {
+            font-family: var(--serif);
+            font-size: 30px;
+            letter-spacing: 2px;
+            font-weight: 800;
+        }
+        .page-head h1::after {
+            content: "";
+            display: block;
+            width: 40px;
+            height: 3px;
+            margin-top: 14px;
+            border-radius: 3px;
+            background: linear-gradient(90deg, var(--seal), var(--seal-2));
+        }
+        .page-head p {
+            margin-top: 14px;
+            max-width: 640px;
+            font-size: 14.5px;
+            color: var(--ink-soft);
+        }
+        .count-badge {
+            flex: none;
+            display: inline-flex;
+            align-items: baseline;
+            gap: 6px;
+            padding: 8px 20px;
+            font-size: 13px;
+            color: var(--jade);
+            background: rgba(63, 111, 99, .08);
+            border: 1px solid rgba(63, 111, 99, .18);
+            border-radius: 999px;
+            letter-spacing: .5px;
+        }
+        .count-badge strong {
+            font-family: var(--serif);
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--jade);
+        }
+
+        /* ============ 表格卡片 ============ */
+        .table-card {
+            background: var(--paper-2);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            box-shadow: 0 12px 34px rgba(27, 36, 48, .07);
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead th {
+            padding: 15px 22px;
+            font-size: 12.5px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            color: var(--muted);
+            text-align: left;
+            background: #f4eee2;
+            border-bottom: 1px solid var(--line);
+            white-space: nowrap;
+        }
+
+        tbody td {
+            padding: 16px 22px;
+            font-size: 15px;
+            color: var(--ink);
+            border-bottom: 1px solid #f0eadd;
+            vertical-align: top;
+            word-break: break-word;
+        }
+        tbody tr:last-child td { border-bottom: none; }
+        tbody tr { transition: background .18s; }
+        tbody tr:hover { background: #fdfaf3; }
+
+        /* 各列风格 */
+        td.col-input {
+            font-family: "STKaiti", "KaiTi", "楷体", serif;
+            font-size: 17px;
+            letter-spacing: 1px;
+            color: var(--seal);
+            width: 28%;
+        }
+        td.col-output {
+            color: var(--ink-soft);
+            width: 47%;
+        }
+        td.col-time {
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 13px;
+            color: var(--muted);
+            white-space: nowrap;
+            width: 25%;
+        }
+        /* 空状态 */
+        .empty {
+            padding: 72px 24px;
+            text-align: center;
+            color: var(--muted);
+        }
+        .empty .glyph {
+            font-family: var(--serif);
+            font-size: 44px;
+            color: #d8cfbf;
+            letter-spacing: 8px;
+            margin-bottom: 14px;
+        }
+        .empty p { font-size: 14.5px; }
+        .empty .sub { font-size: 13px; color: #a9a190; margin-top: 6px; }
+
+        /* ============ 底部操作区 ============ */
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-top: 24px;
+        }
+        .tip {
+            font-size: 12.5px;
+            color: var(--muted);
+            letter-spacing: .5px;
+        }
+        .history-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--line);
+        }
+        .history-tab-btn {
+            background: none;
+            border: none;
+            font: inherit;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--muted);
+            padding: 12px 20px;
+            cursor: pointer;
+            position: relative;
+            transition: color 0.2s;
+        }
+        .history-tab-btn:hover {
+            color: var(--ink-soft);
+        }
+        .history-tab-btn.active {
+            color: var(--seal);
+        }
+        .history-tab-btn.active::after {
+            content: "";
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, var(--seal), var(--seal-2));
+            border-radius: 3px 3px 0 0;
+        }
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* ============ 响应式 ============ */
+        @media (max-width: 720px) {
+            .shell { padding: 26px 16px 56px; }
+            .page-head h1 { font-size: 24px; }
+            thead { display: none; }
+            table, tbody, tr, td { display: block; width: 100%; }
+            tbody tr {
+                padding: 14px 18px;
+                border-bottom: 1px solid var(--line);
+            }
+            tbody tr:last-child { border-bottom: none; }
+            tbody td {
+                padding: 6px 0;
+                border-bottom: none;
+            }
+            tbody td::before {
+                content: attr(data-label);
+                display: block;
+                font-size: 11px;
+                letter-spacing: 2px;
+                color: var(--muted);
+                margin-bottom: 2px;
+            }
+            td.col-input, td.col-output, td.col-time { width: 100%; }
+            td.col-time { white-space: normal; }
+            .actions { flex-direction: column-reverse; align-items: stretch; }
+            .actions .btn { width: 100%; }
+            .tip { text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <!-- ===== 顶部导航 ===== -->
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a class="brand" href="{% url 'home' %}">
+                <span class="seal">篆</span>
+                <span class="brand-text">
+                    汉字字形演变
+                    <em>信息管理系统</em>
+                </span>
+            </a>
+            <a class="back-link" href="{% url 'home' %}">← 返回系统首页</a>
+        </div>
+    </nav>
+
+    <main class="shell">
+        <!-- 面包屑 -->
+        <div class="crumb">
+            <a href="{% url 'home' %}">首页</a><span>/</span>简繁转换历史记录
+        </div>
+
+        <!-- 页面标题 -->
+        <header class="page-head">
+            <div>
+                <h1>简繁转换历史记录</h1>
+                <p>系统自动保存每一次简繁转换，按时间倒序排列，已为您按转换方向分类。</p>
+            </div>
+            <span class="count-badge" id="countBadge">共 <strong>{{ s2t_datas|length }}</strong> 条记录</span>
+        </header>
+
+        <!-- 模式切换 Tab -->
+        <div class="history-tabs">
+            <button class="history-tab-btn active" data-target="tab-s2t" data-count="{{ s2t_datas|length }}">
+                简体 → 繁体 ({{ s2t_datas|length }})
+            </button>
+            <button class="history-tab-btn" data-target="tab-t2s" data-count="{{ t2s_datas|length }}">
+                繁体 → 简体 ({{ t2s_datas|length }})
+            </button>
+        </div>
+
+        <!-- ===== Tab 1: 简转繁 ===== -->
+        <div id="tab-s2t" class="tab-content active">
+            <section class="table-card">
+                {% if s2t_datas %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>简体输入</th>
+                            <th>繁体输出</th>
+                            <th>查询时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for data in s2t_datas %}
+                        <tr>
+                            <td class="col-input" data-label="简体输入">{{ data.input }}</td>
+                            <td class="col-output" data-label="繁体输出">{{ data.output }}</td>
+                            <td class="col-time" data-label="查询时间">{{ data.create_time }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty">
+                    <div class="glyph">简 繁</div>
+                    <p>暂无「简转繁」记录</p>
+                    <p class="sub">前往「简繁双向转换」选择简体转繁体并完成一次查询。</p>
+                </div>
+                {% endif %}
+            </section>
+        </div>
+
+        <!-- ===== Tab 2: 繁转简 ===== -->
+        <div id="tab-t2s" class="tab-content">
+            <section class="table-card">
+                {% if t2s_datas %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>繁体输入</th>
+                            <th>简体输出</th>
+                            <th>查询时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for data in t2s_datas %}
+                        <tr>
+                            <td class="col-input" data-label="繁体输入">{{ data.input }}</td>
+                            <td class="col-output" data-label="简体输出">{{ data.output }}</td>
+                            <td class="col-time" data-label="查询时间">{{ data.create_time }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty">
+                    <div class="glyph">繁 简</div>
+                    <p>暂无「繁转简」记录</p>
+                    <p class="sub">前往「简繁双向转换」选择繁体转简体并完成一次查询。</p>
+                </div>
+                {% endif %}
+            </section>
+        </div>
+
+        <!-- 底部操作区 -->
+        <div class="actions" style="margin-top: 24px;">
+            <span class="tip">清空操作不可撤销，请谨慎执行。</span>
+            <form action="/jianfan22/delete" method="post" style="margin:0;">
+                {% csrf_token %}
+                <input class="btn btn-danger" type="submit" value="清空全部历史" onclick="return confirm('确定清空所有简繁记录？')">
+            </form>
+        </div>
+    </main>
+
+    <!-- Tab 切换 JS -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const tabs = document.querySelectorAll('.history-tab-btn');
+            const contents = document.querySelectorAll('.tab-content');
+            const countBadge = document.getElementById('countBadge');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    // 移除激活状态
+                    tabs.forEach(t => t.classList.remove('active'));
+                    contents.forEach(c => c.classList.remove('active'));
+
+                    // 激活当前选中的
+                    this.classList.add('active');
+                    const targetId = this.getAttribute('data-target');
+                    document.getElementById(targetId).classList.add('active');
+
+                    // 更新右上角的数字
+                    const count = this.getAttribute('data-count');
+                    countBadge.innerHTML = `共 <strong>${count}</strong> 条记录`;
+                });
+            });
+        });
+    </script>
+</body>
+</html>

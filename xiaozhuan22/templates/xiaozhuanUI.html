@@ -1,0 +1,1308 @@
+{#{% load static %}#}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小篆字形浏览 · 汉字字形信息管理系统</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/static/css/base.css">
+    <style>
+        @font-face {
+            font-family: "Xiaozhuan";
+            src: url("/static/font/说文解字篆体.ttf") format('truetype');
+        }
+
+        body {
+            font-family: "PingFang SC", "Microsoft Yahei", system-ui, -apple-system, sans-serif;
+            color: var(--ink);
+            line-height: 1.75;
+            min-height: 100vh;
+            background:
+                radial-gradient(900px 420px at 8% -10%, #fff8ea 0%, rgba(255, 248, 234, 0) 62%),
+                radial-gradient(760px 420px at 94% 4%, #f1eade 0%, rgba(241, 234, 222, 0) 58%),
+                var(--paper);
+            -webkit-font-smoothing: antialiased;
+        }
+        a { color: inherit; }
+        /* ============ 顶部导航 ============ */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: rgba(246, 242, 233, .85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--line);
+        }
+        .navbar-inner {
+            max-width: 1060px;
+            margin: 0 auto;
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        /* ============ 查询条 ============ */
+        .query-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            background: var(--paper-2);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            box-shadow: 0 10px 26px rgba(27, 36, 48, .06);
+        }
+        .query-input {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+        }
+        .q-label {
+            font-size: 13px;
+            letter-spacing: 2px;
+            color: var(--brown);
+        }
+        .query-input input {
+            width: 148px;
+            padding: 10px 12px;
+            font-family: var(--kai);
+            font-size: 20px;
+            text-align: center;
+            letter-spacing: 4px;
+            color: var(--ink);
+            background: #fdfbf6;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            transition: border-color .2s, box-shadow .2s;
+        }
+        .query-input input::placeholder {
+            font-size: 14px;
+            letter-spacing: 1px;
+            color: #b6ae9d;
+        }
+        .query-input input:focus {
+            outline: none;
+            border-color: #d8b48e;
+            box-shadow: 0 0 0 3px rgba(212, 120, 63, .12);
+        }
+        /* ============ 主舞台 ============ */
+        .stage {
+            display: grid;
+            grid-template-columns: 1.12fr .88fr;
+            gap: 22px;
+            align-items: stretch;
+        }
+
+        /* 字形面板 */
+        .char-panel {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 42px 26px 24px;
+            background:
+                radial-gradient(circle at 50% 38%, #fffefb 0%, #fbf6ec 72%),
+                #fbf6ec;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            box-shadow: 0 14px 34px rgba(27, 36, 48, .08);
+            overflow: hidden;
+        }
+        .char-panel::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--seal) 0%, var(--gold) 50%, var(--brown) 100%);
+        }
+        .panel-badge {
+            position: absolute;
+            top: 14px;
+            left: 14px;
+            padding: 3px 12px;
+            font-size: 11px;
+            letter-spacing: 3px;
+            color: var(--brown);
+            background: rgba(255, 253, 248, .85);
+            border: 1px solid #ecdfc7;
+            border-radius: 999px;
+            z-index: 2;
+        }
+        .char-box {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 230px;
+            padding: 18px 0 10px;
+            font-family: "Xiaozhuan", "SimHei", serif;
+            font-size: clamp(96px, 15vw, 160px);
+            line-height: 1.05;
+            color: #2b2b2b;
+            text-align: center;
+            user-select: none;
+            text-shadow: 0 4px 16px rgba(139, 115, 85, .12);
+        }
+		/* ===== 多字形：主图 + 缩略图切换（纯 CSS） ===== */
+        .font-switcher {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            flex: 1;
+        }
+        /* 隐藏的 radio，充当"当前字体"状态 */
+        .font-radio { display: none; }
+        /* 主展示区 */
+        .font-main-stage {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .font-main {
+            display: none;
+            width: 100%;
+            flex-direction: column;
+            align-items: center;
+            animation: charFade .3s ease;
+        }
+        /* 关键：选中的 radio 紧邻的那个主字形显示 */
+        .font-radio:checked + .font-main { display: flex; }
+
+        @keyframes charFade {
+            from { opacity: 0; transform: scale(.96); }
+            to   { opacity: 1; transform: scale(1); }
+        }
+
+        /* 大字形：覆盖 .char-box 的 flex:1，避免在 column 里被拉伸 */
+        .char-box.main {
+            flex: none;
+            min-height: 230px;
+            padding: 10px 0 4px;
+        }
+
+        /* 主图下方：来源 + 导出 */
+        .char-main-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 2px 0 8px;
+            font-size: 12px;
+        }
+
+        /* 缩略图条：横向滑动 */
+        .font-strip {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            padding: 10px 2px 4px;
+            margin-top: 4px;
+            overflow-x: auto;
+            scroll-snap-type: x proximity;
+            border-top: 1px dashed #ddd3c2;
+            scrollbar-width: thin;
+            scrollbar-color: #e0d6c2 transparent;
+        }
+        .font-strip::-webkit-scrollbar { height: 6px; }
+        .font-strip::-webkit-scrollbar-thumb {
+            background: #e0d6c2;
+            border-radius: 99px;
+        }
+
+        .thumb {
+            flex: 0 0 auto;
+            scroll-snap-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            min-width: 78px;
+            padding: 8px 8px 6px;
+            background: #fffdf8;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            cursor: pointer;
+            user-select: none;
+            transition: border-color .2s, box-shadow .2s, transform .2s;
+        }
+        .thumb:hover {
+            border-color: #d3c7ae;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 14px rgba(27, 36, 48, .08);
+        }
+        .thumb:active { transform: translateY(0); }
+        .thumb-char {
+            font-size: 38px;
+            line-height: 1.15;
+            color: #2b2b2b;
+        }
+        .thumb-name {
+            max-width: 74px;
+            font-size: 11px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        @media (max-width: 520px) {
+            .char-box.main { min-height: 180px; font-size: clamp(80px, 22vw, 120px); }
+            .thumb-char { font-size: 32px; }
+            .thumb { min-width: 68px; }
+        }
+
+        .char-source {
+            font-size: 12px;
+            color: var(--brown);
+            margin: 8px 0;
+        }
+        .export-btn {
+            font-size: 12px;
+            padding: 4px 16px;
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            background: transparent;
+            color: var(--ink-soft);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .export-btn:hover {
+            background: var(--seal);
+            color: #fff;
+            border-color: var(--seal);
+        }
+
+        /* 现代楷书对照 */
+        .char-modern {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 18px;
+            margin-bottom: 16px;
+            background: rgba(255, 255, 255, .65);
+            border: 1px dashed #ddd3c2;
+            border-radius: 999px;
+        }
+        .modern-label {
+            font-size: 11px;
+            letter-spacing: 2px;
+            color: var(--muted);
+        }
+        .modern-char {
+            font-family: var(--kai);
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--seal);
+            line-height: 1;
+        }
+
+        /* 上一个 / 下一个 */
+        .browse {
+            display: flex;
+            gap: 12px;
+            width: 100%;
+            justify-content: center;
+            padding-top: 14px;
+            border-top: 1px dashed #ddd3c2;
+        }
+        .nav-btn {
+            flex: 1;
+            max-width: 150px;
+            font: inherit;
+            font-size: 14px;
+            letter-spacing: 1px;
+            padding: 9px 0;
+            color: var(--ink-soft);
+            background: #fffdf8;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            cursor: pointer;
+            transition: color .2s, border-color .2s, background .2s, transform .2s;
+        }
+        .nav-btn:hover {
+            color: var(--seal);
+            border-color: #d8cbb2;
+            background: #fdf8ef;
+            transform: translateY(-1px);
+        }
+
+        /* 侧栏 */
+        .side {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            min-width: 0;
+        }
+
+        .desc-box {
+            flex: 1;
+            min-height: 110px;
+            padding: 18px 22px 20px;
+            font-family: var(--kai);
+            font-size: 16px;
+            line-height: 1.85;
+            color: #555;
+            background: linear-gradient(135deg, #fdfcfb 0%, #f4f1ec 100%);
+            border: 1px solid #e8e2d8;
+            border-radius: 14px;
+            box-shadow: 0 6px 18px rgba(139, 115, 85, .06);
+        }
+        .desc-label {
+            display: inline-block;
+            font-family: "PingFang SC", "Microsoft Yahei", sans-serif;
+            font-size: 11px;
+            letter-spacing: 3px;
+            color: var(--brown);
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px dashed #d8cfbf;
+        }
+
+        /* ===== 字形档案卡片 ===== */
+        .info-card {
+            position: relative;
+            background: linear-gradient(135deg, #fdfcfb 0%, #f4f1ec 100%);
+            border: 1px solid #e8e2d8;
+            border-radius: 16px;
+            padding: 24px 24px 20px;
+            box-shadow: 0 2px 14px rgba(139, 115, 85, .08);
+            overflow: hidden;
+        }
+        .info-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--seal) 0%, var(--gold) 50%, var(--brown) 100%);
+        }
+        .info-header {
+            text-align: center;
+            font-family: var(--kai);
+            font-size: 13px;
+            color: var(--brown);
+            letter-spacing: 6px;
+            margin-bottom: 18px;
+            padding-bottom: 12px;
+            border-bottom: 1px dashed #d8cfbf;
+            text-indent: 6px;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px 14px;
+        }
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 12px 14px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 10px;
+            border-left: 3px solid #d4a373;
+            transition: all 0.25s ease;
+        }
+        .info-item:hover {
+            background: #ffffff;
+            border-left-color: var(--seal);
+            transform: translateX(3px);
+            box-shadow: 0 2px 10px rgba(178, 58, 46, 0.1);
+        }
+        .info-label {
+            font-size: 11px;
+            color: var(--brown);
+            letter-spacing: 3px;
+            font-weight: 500;
+        }
+        .info-value {
+            font-family: var(--kai);
+            font-size: 21px;
+            color: #2c2c2c;
+            font-weight: 600;
+            line-height: 1.2;
+            word-break: break-word;
+        }
+        .pinyin-value {
+            color: var(--seal);
+            font-style: italic;
+            font-family: var(--kai);
+            font-size: 24px;
+            font-weight: 700;
+        }
+        .code-value {
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 16px;
+            color: #a52a20;
+            background: #f4f1ec;
+            padding: 4px 12px;
+            border-radius: 6px;
+            align-self: flex-start;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        /* ============ 关于小篆 ============ */
+        .about-xz {
+            position: relative;
+            margin-top: 30px;
+            padding: 28px 30px 30px;
+            background: var(--paper-2);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            box-shadow: 0 10px 30px rgba(27, 36, 48, .05);
+            overflow: hidden;
+        }
+        .about-xz::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--seal), var(--gold), var(--brown));
+        }
+        .about-head { margin-bottom: 22px; }
+        .about-head h2 {
+            font-family: var(--serif);
+            font-size: 22px;
+            letter-spacing: 2px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+        .about-head h2::before {
+            content: "";
+            display: inline-block;
+            width: 3px;
+            height: 16px;
+            margin-right: 10px;
+            border-radius: 2px;
+            background: linear-gradient(180deg, var(--seal), var(--seal-2));
+            vertical-align: -1px;
+        }
+        .about-head p {
+            font-size: 14px;
+            color: var(--ink-soft);
+            max-width: 800px;
+        }
+        .about-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .about-item {
+            padding: 18px 20px;
+            background: #faf5ea;
+            border: 1px solid #ede4d3;
+            border-left: 3px solid var(--seal);
+            border-radius: 12px;
+            transition: transform .22s, box-shadow .25s;
+        }
+        .about-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 22px rgba(27, 36, 48, .08);
+        }
+        .about-num {
+            display: inline-block;
+            font-family: var(--serif);
+            font-size: 13px;
+            color: var(--seal);
+            letter-spacing: 2px;
+            margin-bottom: 6px;
+        }
+        .about-item h3 {
+            font-family: var(--serif);
+            font-size: 16px;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+        .about-item p {
+            font-size: 13.5px;
+            color: var(--ink-soft);
+            line-height: 1.75;
+        }
+        .xz-gallery {
+            padding-top: 20px;
+            border-top: 1px dashed #e4dbc9;
+        }
+        .xz-gallery h3 {
+            font-family: var(--serif);
+            font-size: 15px;
+            letter-spacing: 4px;
+            color: var(--brown);
+            margin-bottom: 16px;
+            text-align: center;
+            font-weight: 600;
+        }
+        .gallery-grid {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 14px 22px;
+        }
+        .g-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 10px 18px 12px;
+            background: radial-gradient(circle at 50% 40%, #fffefb 0%, #f7efe0 80%);
+            border: 1px solid #ecdfc7;
+            border-radius: 10px;
+            min-width: 84px;
+            transition: transform .2s, box-shadow .25s;
+        }
+        .g-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 18px rgba(139, 115, 85, .14);
+        }
+        .g-xz {
+            font-family: "Xiaozhuan", "SimHei", serif;
+            font-size: 46px;
+            line-height: 1.1;
+            color: #2b2b2b;
+        }
+        .g-cap {
+            font-size: 12px;
+            color: var(--muted);
+            letter-spacing: 1px;
+        }
+
+
+        /* ============ 批量导出面板 ============ */
+        .batch-panel {
+            margin-bottom: 24px;
+            background: var(--paper-2);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            box-shadow: 0 10px 26px rgba(27, 36, 48, .06);
+            overflow: hidden;
+        }
+        .batch-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            padding: 16px 22px;
+            font: inherit;
+            font-size: 14.5px;
+            color: var(--ink);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: background .2s;
+        }
+        .batch-toggle:hover { background: #faf5ea; }
+        .batch-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+        .batch-title::before {
+            content: "批";
+            display: grid;
+            place-items: center;
+            width: 24px;
+            height: 24px;
+            font-family: var(--serif);
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
+            background: linear-gradient(135deg, var(--seal), #c9513f);
+            border-radius: 6px;
+        }
+        .batch-arrow {
+            color: var(--muted);
+            font-size: 12px;
+            transition: transform .25s;
+        }
+        .batch-panel.active .batch-arrow { transform: rotate(180deg); }
+        .batch-body {
+            padding: 0 22px 22px;
+            border-top: 1px dashed var(--line);
+        }
+        .batch-hint {
+            margin: 16px 0 12px;
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.7;
+        }
+        .batch-hint code {
+            padding: 1px 6px;
+            font-family: Consolas, monospace;
+            font-size: 12px;
+            color: var(--seal);
+            background: #faf5ea;
+            border-radius: 4px;
+        }
+        .batch-body textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 12px 14px;
+            font: inherit;
+            font-size: 15px;
+            line-height: 1.7;
+            color: var(--ink);
+            background: #fdfbf6;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            resize: vertical;
+            transition: border-color .2s, box-shadow .2s;
+        }
+        .batch-body textarea:focus {
+            outline: none;
+            border-color: #d8b48e;
+            box-shadow: 0 0 0 3px rgba(212, 120, 63, .12);
+        }
+        .batch-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 14px;
+        }
+        .batch-count {
+            font-size: 13px;
+            color: var(--ink-soft);
+            letter-spacing: .5px;
+        }
+        .batch-count strong {
+            font-family: var(--serif);
+            font-size: 19px;
+            color: var(--seal);
+            margin: 0 3px;
+        }
+        .batch-upload {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px dashed var(--line);
+        }
+        .batch-upload-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+        .batch-upload-text strong {
+            font-size: 13.5px;
+            color: var(--ink);
+            letter-spacing: .5px;
+        }
+        .batch-upload-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .batch-file-input { display: none; }
+        .batch-file-name {
+            max-width: 220px;
+            font-size: 12.5px;
+            color: var(--seal);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .batch-options {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 22px;
+            margin-top: 12px;
+            font-size: 13px;
+            color: var(--ink-soft);
+        }
+        .batch-check {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .batch-check input {
+            width: 15px;
+            height: 15px;
+            accent-color: var(--seal);
+            cursor: pointer;
+        }
+        .batch-colors {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .batch-color-dot {
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            border: 2px solid transparent;
+            border-radius: 50%;
+            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08);
+            cursor: pointer;
+            transition: transform .15s, border-color .15s;
+        }
+        .batch-color-dot:hover { transform: scale(1.12); }
+        .batch-color-dot.active { border-color: var(--ink); }
+        .batch-color-input {
+            width: 26px;
+            height: 22px;
+            padding: 0;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+        }
+        .btn:disabled {
+            opacity: .5;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* ============ 响应式 ============ */
+        @media (max-width: 820px) {
+            .stage { grid-template-columns: 1fr; }
+            .char-box { min-height: 200px; }
+            .page-head h1 { font-size: 24px; }
+            .about-xz { padding: 22px 20px 24px; }
+        }
+        @media (max-width: 520px) {
+            .shell { padding: 26px 18px 48px; }
+            .query-bar { padding: 14px 16px; }
+            .query-input { width: 100%; }
+            .query-input input { flex: 1; width: auto; }
+            .info-grid { grid-template-columns: 1fr; }
+            .char-box { font-size: clamp(80px, 24vw, 120px); }
+        }
+    </style>
+</head>
+<body>
+    <!-- ===== 顶部导航 ===== -->
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a class="brand" href="{% url 'home' %}">
+                <span class="seal">篆</span>
+                <span class="brand-text">
+                    汉字字形
+                    <em>信息管理系统</em>
+                </span>
+            </a>
+            <a class="back-link" href="{% url 'home' %}">← 返回系统首页</a>
+        </div>
+    </nav>
+
+    <main class="shell">
+        <!-- 面包屑 -->
+        <div class="crumb">
+            <a href="{% url 'home' %}">首页</a><span>/</span>小篆字形浏览
+        </div>
+
+        <!-- 页面标题 -->
+        <header class="page-head">
+            <h1>小篆字形生成与浏览</h1>
+            <p>输入单个汉字即可渲染对应的小篆字形，同步查看拼音、部首、笔画与 Unicode 编码等基础元数据，并通过“上一个 / 下一个”顺序浏览字库候选汉字。</p>
+        </header>
+
+        <div id="app" v-cloak>
+            <!-- 查询条 -->
+            <section class="query-bar">
+                <div class="query-input">
+                    <span class="q-label">输入汉字</span>
+                    <input v-model="inputChar" maxlength="1" placeholder="如：书、马" @keyup.enter="searchChar">
+                    <button class="btn btn-primary" @click="searchChar">查询小篆</button>
+                </div>
+                <button class="btn btn-ghost" type="button" onclick="window.location.href='/xiaozhuan22/historyUI'">历史记录</button>
+            </section>
+
+   <!-- ===== 批量导出小篆到 Word ===== -->
+            <section class="batch-panel" :class="{ active: showBatch }">
+                <button class="batch-toggle" type="button" @click="showBatch = !showBatch">
+                    <span class="batch-title">批量导出小篆到 Word</span>
+                    <span class="batch-arrow">▼</span>
+                </button>
+                <div v-show="showBatch" class="batch-body">
+                    <p class="batch-hint">
+                        输入或粘贴一段文本（如诗句、短文），系统会自动识别其中的所有汉字并渲染为<strong>小篆字形</strong>（可设置是否保留标点、选择字形颜色），
+                        生成 <code>.docx</code> 文档下载，单元格下方附带楷书对照。单次最多 1000 字。
+                    </p>
+                    <textarea v-model="batchText"
+                              placeholder="例如：山重水复疑无路，柳暗花明又一村"></textarea>
+                    <div class="batch-options">
+                        <label class="batch-check">
+                            <input type="checkbox" v-model="keepPunct">
+                            <span>保留标点符号</span>
+                        </label>
+                        <div class="batch-colors">
+                            <span>字形颜色</span>
+                            <button v-for="c in colorOptions"
+                                    :key="c.value"
+                                    class="batch-color-dot"
+                                    :class="{ active: batchColor === c.value }"
+                                    :style="{ background: c.value }"
+                                    :title="c.name"
+                                    type="button"
+                                    @click="batchColor = c.value"></button>
+                            <input class="batch-color-input" type="color" v-model="batchColor" title="自定义颜色">
+                        </div>
+                    </div>
+                    <div class="batch-footer">
+                        <span class="batch-count">
+                            已识别 <strong>[[ batchCount ]]</strong> 个汉字
+                        </span>
+                        <button class="btn btn-primary"
+                                type="button"
+                                :disabled="batchCount === 0"
+                                @click="exportWord">导出 Word 文档</button>
+                    </div>
+                    <div class="batch-upload">
+                        <div class="batch-upload-text">
+                            <strong>上传文档批量转换</strong>
+                            <span>支持 .docx / .pdf（≤ 10 MB，扫描版 PDF 无法识别文字），提取文字后按小篆生成 Word</span>
+                        </div>
+                        <div class="batch-upload-actions">
+                            <input ref="docFile" class="batch-file-input" type="file"
+                                   accept=".docx,.pdf" @change="uploadDoc">
+                            <button class="btn btn-ghost"
+                                    type="button"
+                                    :disabled="uploading"
+                                    @click="$refs.docFile.click()">[[ uploading ? '正在转换…' : '选择文档并导出' ]]</button>
+                            <span class="batch-file-name">[[ uploadName ]]</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <div class="stage">
+                <!-- 左：字形展示 -->
+                <section class="char-panel">
+                    <span class="panel-badge">小 篆 字 形</span>
+                    <div v-if="!fontList.length" class="char-box" style="color:#d8cfbf;">
+                        [[ currentChar ? "未收录" : "---" ]]
+                    </div>
+
+                    <!-- 多字形并排展示 -->
+                    <div v-else class="font-switcher">
+                        <!-- 主展示区：radio 与主字形交替排列 -->
+                        <div class="font-main-stage">
+                            <template v-for="(f, i) in fontList" :key="'main-' + i">
+                                <input class="font-radio"
+                                       type="radio"
+                                       name="active-font"
+                                       :id="`active-font-${i}`"
+                                       :checked="i === 0">
+                                <div class="font-main">
+                                    <div class="char-box main" :style="{ fontFamily: `'${f.name}', serif` }">
+                                        [[ currentChar ]]
+                                    </div>
+                                    <div class="char-main-meta">
+                                        <span class="char-source">来源：[[ f.name ]]</span>
+                                        <button class="export-btn" @click="exportPng(currentChar, f.name)">导 出</button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- 缩略图条：仅多字体时出现 -->
+                        <div v-if="fontList.length > 1" class="font-strip">
+                            <label v-for="(f, i) in fontList" :key="'thumb-' + i"
+                                   :for="`active-font-${i}`"
+                                   class="thumb"
+                                   :title="f.name">
+                                <span class="thumb-char" :style="{ fontFamily: `'${f.name}', serif` }">
+                                    [[ currentChar ]]
+                                </span>
+                                <span class="thumb-name">[[ f.name ]]</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="char-modern">
+                        <span class="modern-label">现代楷书</span>
+                        <span class="modern-char">[[ currentChar || "—" ]]</span>
+                    </div>
+                    <div class="browse">
+                        <button class="nav-btn" @click="prevChar">← 上一个</button>
+                        <button class="nav-btn" @click="nextChar">下一个 →</button>
+                    </div>
+                </section>
+
+
+                <!-- 右：简介 + 档案 -->
+                <div class="side">
+                    <div class="desc-box">
+                        <span class="desc-label">简 介</span>
+                        <p>[[ charInfo ? charInfo.description : "输入汉字后，这里会显示该字的简介。" ]]</p>
+                    </div>
+
+                    <div class="info-card">
+                        <div class="info-header">字 形 档 案</div>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <span class="info-label">拼 音</span>
+                                <span class="info-value pinyin-value">[[ charInfo ? charInfo.pinyin : "—" ]]</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">部 首</span>
+                                <span class="info-value">[[ charInfo ? charInfo.radical : "—" ]]</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">笔 画</span>
+                                <span class="info-value">[[ charInfo ? charInfo.stroke : "—" ]]</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Unicode</span>
+                                <span class="info-value code-value">[[ charInfo ? charInfo.unicode : "—" ]]</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 关于小篆 -->
+            <section class="about-xz">
+                <div class="about-head">
+                    <h2>关于小篆</h2>
+                    <p>
+                        小篆是秦代统一后的标准字形，由李斯等人整理，上承金文大篆，下启隶书楷书，
+                        是汉字发展史上第一次系统性的字形规范，也是解读古文字构形的重要窗口。
+                    </p>
+                </div>
+
+                <div class="about-grid">
+                    <article class="about-item">
+                        <span class="about-num">壹</span>
+                        <h3>书同文</h3>
+                        <p>秦始皇统一六国后推行“书同文”，以小篆为全国标准字形。李斯作《仓颉篇》、赵高作《爰历篇》、胡毋敬作《博学篇》，合称“三苍”，作为推行小篆的范本。</p>
+                    </article>
+                    <article class="about-item">
+                        <span class="about-num">贰</span>
+                        <h3>字形特点</h3>
+                        <p>小篆字形呈长方形，结构对称，线条圆转匀称，笔画粗细一致。与甲骨文、金文强烈的象形性相比，小篆已高度符号化，构形更趋统一。</p>
+                    </article>
+                    <article class="about-item">
+                        <span class="about-num">叁</span>
+                        <h3>说文解字</h3>
+                        <p>东汉许慎《说文解字》以小篆为字头，立 540 部首，收 9353 字，是中国第一部系统分析字形、考究字源的字典，也是查阅小篆字形的重要依据。</p>
+                    </article>
+                </div>
+
+                <div class="xz-gallery">
+                    <h3>小 篆 字 形 示 例</h3>
+                    <div class="gallery-grid">
+                        <div class="g-item">
+                            <span class="g-xz">馬</span>
+                            <span class="g-cap">马</span>
+                        </div>
+                        <div class="g-item">
+                            <span class="g-xz">書</span>
+                            <span class="g-cap">书</span>
+                        </div>
+                        <div class="g-item">
+                            <span class="g-xz">雲</span>
+                            <span class="g-cap">云</span>
+                        </div>
+                        <div class="g-item">
+                            <span class="g-xz">鼎</span>
+                            <span class="g-cap">鼎</span>
+                        </div>
+                        <div class="g-item">
+                            <span class="g-xz">樂</span>
+                            <span class="g-cap">乐</span>
+                        </div>
+                        <div class="g-item">
+                            <span class="g-xz">山</span>
+                            <span class="g-cap">山</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <footer>
+            <div class="fz">鼎 書 雲 馬 樂</div>
+            课程设计 · 汉字字形 Web 信息管理系统
+        </footer>
+    </main>
+
+    <script>
+    const API_XIAOZHUAN = "{% url 'xiaozhuan22:convert' %}";
+    const API_EXPORT_WORD = "{% url 'xiaozhuan22:export_word' %}";
+    const API_EXPORT_WORD_UPLOAD = "{% url 'xiaozhuan22:export_word_upload' %}";
+    const CSRF_TOKEN = "{{ csrf_token }}";
+    </script>
+    <script src="/static/vue.global.js"></script>
+    <script>
+    const { createApp } = Vue
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        data() {
+            return {
+                inputChar: "",
+                currentChar: "",
+                charInfo: null,
+                {#charList: [],#}
+                index: 0,
+				fontList: [],
+                // ===== 批量导出 =====
+                showBatch: false,
+                batchText: "",
+                keepPunct: true,
+                batchColor: "#c82828",
+                colorOptions: [
+                    { name: "朱红", value: "#c82828" },
+                    { name: "墨黑", value: "#1b2430" },
+                    { name: "靛蓝", value: "#2f4b7c" },
+                    { name: "松绿", value: "#2f6b4f" }
+                ],
+                // ===== 上传文档导出 =====
+                uploading: false,
+                uploadName: ""
+
+            }
+        },
+        computed: {
+            batchCount() {
+                return (this.batchText.match(/[\u4e00-\u9fff]/g) || []).length
+            }
+        },
+        {% comment %}async created() {
+            // 页面初始化，读取charlist.json
+            try {
+                const resp = await fetch("{% static '../../data/charlist.json' %}")
+                this.charList = await resp.json()
+                console.log("加载小篆字库列表成功，总字数：", this.charList.length)
+            } catch (err) {
+                console.error("加载charlist.json失败", err)
+                alert("字库列表加载失败！")
+            }
+        },{% endcomment %}
+        methods: {
+            async fetchChar(char, action = '') {
+                const url = `${API_XIAOZHUAN}?char=${encodeURIComponent(char)}`
+                    + (action ? `&action=${action}` : '')
+                try {
+                    const res = await fetch(url)
+                    const data = await res.json()
+
+                    if (data.code !== 200) {
+                        // 注意：失败时不清空当前展示，避免翻页失败把页面清掉
+                        alert(data.msg || '查询失败')
+                        return
+                    }
+
+                    const readyFonts = []
+                    for (let f of data.fonts) {
+                        try {
+                            const face = new FontFace(f.name, `url(${f.url})`)
+                            await face.load()
+                            document.fonts.add(face)
+                            readyFonts.push(f)
+                        } catch (err) {
+                            console.error("字体下载失败:", f.name, err)
+                        }
+                    }
+
+                    this.currentChar = data.char
+                    this.charInfo = data.info
+                    this.fontList = readyFonts
+                    this.inputChar = data.char
+
+                    // 翻页但历史不足以切换
+                    if (action && !data.switched) {
+                        alert('暂无更多历史记录可切换')
+                    }
+                } catch (e) {
+                    console.error(e)
+                    alert('请求失败，请检查接口地址')
+                }
+            },
+
+            async searchChar() {
+                const text = this.inputChar.trim()
+                if (!text) {
+                    alert('请输入汉字')
+                    return
+                }
+                if (!/^[\u4e00-\u9fa5]+$/.test(text)) {
+                    alert('请输入有效的汉字')
+                    return
+                }
+                await this.fetchChar(text)
+            },
+
+            async prevChar() {
+                if (!this.currentChar) {
+                    alert('请先查询一个汉字，再进行切换')
+                    return
+                }
+                await this.fetchChar(this.currentChar, 'prev')
+            },
+
+            async nextChar() {
+                if (!this.currentChar) {
+                    alert('请先查询一个汉字，再进行切换')
+                    return
+                }
+                await this.fetchChar(this.currentChar, 'next')
+            },
+            async exportPng(char, fontName) {
+                if (!char || !fontName) {
+                    alert("请先查询汉字并选择对应的字库导出");
+                    return;
+                }
+                try {
+                    await document.fonts.load(`16px "${fontName}"`)
+                } catch (e) {
+                    console.warn("Canvas 字体预加载失败", e)
+                }
+                const numCells = 10
+                const cellSize = 120
+                const gap = 16
+                const padding = 30
+
+                const canvas = document.createElement('canvas')
+                canvas.width = padding * 2 + numCells * cellSize + (numCells - 1) * gap
+                canvas.height = padding * 2 + cellSize
+                const ctx = canvas.getContext('2d')
+                ctx.fillStyle = '#ffffff'
+                ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+                const startX = padding
+                const startY = padding
+                const greenColor = '#40a05b'
+                // 画格子
+                for (let i = 0; i < numCells; i++) {
+                    const x = startX + (cellSize + gap) * i
+                    const y = startY
+                    ctx.strokeStyle = greenColor
+                    ctx.lineWidth = 2
+                    ctx.setLineDash([])
+                    ctx.strokeRect(x, y, cellSize, cellSize)
+
+                    ctx.strokeStyle = 'rgba(64, 160, 91, 0.4)'
+                    ctx.lineWidth = 1
+                    ctx.setLineDash([4, 4])
+                    ctx.beginPath()
+                    ctx.moveTo(x + cellSize / 2, y); ctx.lineTo(x + cellSize / 2, y + cellSize)
+                    ctx.moveTo(x, y + cellSize / 2); ctx.lineTo(x + cellSize, y + cellSize / 2)
+                    ctx.moveTo(x, y); ctx.lineTo(x + cellSize, y + cellSize)
+                    ctx.moveTo(x + cellSize, y); ctx.lineTo(x, y + cellSize)
+                    ctx.stroke()
+                }
+                // 画字（使用传入的 fontName）
+                const fontSize = cellSize * 0.85
+                ctx.font = `${fontSize}px "${fontName}"`
+                ctx.textAlign = 'center'
+                ctx.textBaseline = 'middle'
+                for (let i = 0; i < numCells; i++) {
+                    const cx = startX + (cellSize + gap) * i + cellSize / 2
+                    const cy = startY + cellSize / 2 + 2
+
+                    if (i === 0) {
+                        ctx.fillStyle = '#d35454'
+                        ctx.fillText(char, cx, cy)
+                    } else if (i === 1 || i === 2) {
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.15)'
+                        ctx.fillText(char, cx, cy)
+                    } else if (i === 3 || i === 4) {
+                        ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)'
+                        ctx.lineWidth = 1.5
+                        ctx.setLineDash([])
+                        ctx.strokeText(char, cx, cy)
+                    }
+                }
+                const link = document.createElement('a')
+                link.download = `${char}_${fontName || '小篆'}_练字帖.png`
+                link.href = canvas.toDataURL('image/png')
+                link.click()
+            },
+            exportWord() {
+                const chars = this.keepPunct
+                    ? this.batchText.replace(/\s+/g, '')
+                    : (this.batchText.match(/[\u4e00-\u9fff]/g) || []).join('')
+                if (!chars) {
+                    alert(this.keepPunct ? '请先输入包含汉字的文本' : '未识别到汉字（已关闭标点符号）')
+                    return
+                }
+                if (chars.length > 1000) {
+                    alert('单次最多导出 1000 个汉字，请分批处理')
+                    return
+                }
+                const params = new URLSearchParams({
+                    chars: chars,
+                    punct: this.keepPunct ? '1' : '0',
+                    color: this.batchColor.replace('#', '')
+                })
+                const url = `${API_EXPORT_WORD}?${params.toString()}`
+                const a = document.createElement('a')
+                a.href = url
+                document.body.appendChild(a)
+                a.click()
+                document.body.removeChild(a)
+            },
+            async uploadDoc(event) {
+                const file = event.target.files && event.target.files[0]
+                event.target.value = ''
+                if (!file) return
+                if (!/\.(docx|pdf)$/i.test(file.name)) {
+                    alert('仅支持 .docx 或 .pdf 格式的文档')
+                    return
+                }
+                if (file.size > 10 * 1024 * 1024) {
+                    alert('文档大小不能超过 10 MB')
+                    return
+                }
+
+                this.uploading = true
+                this.uploadName = file.name
+                try {
+                    const form = new FormData()
+                    form.append('file', file)
+                    form.append('punct', this.keepPunct ? '1' : '0')
+                    form.append('color', this.batchColor.replace('#', ''))
+                    const resp = await fetch(API_EXPORT_WORD_UPLOAD, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': CSRF_TOKEN },
+                        body: form
+                    })
+                    const contentType = resp.headers.get('content-type') || ''
+                    if (!resp.ok || contentType.includes('application/json')) {
+                        const data = await resp.json().catch(() => ({}))
+                        alert(data.msg || '文档转换失败')
+                        return
+                    }
+                    const blob = await resp.blob()
+                    const blobUrl = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = blobUrl
+                    a.download = file.name.replace(/\.(docx|pdf)$/i, '') + '_小篆.docx'
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    URL.revokeObjectURL(blobUrl)
+                } catch (e) {
+                    console.error(e)
+                    alert('上传失败，请稍后重试')
+                } finally {
+                    this.uploading = false
+                }
+            },
+        }
+    }).mount("#app")
+    </script>
+</body>
+</html>
