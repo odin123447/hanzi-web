@@ -48,7 +48,16 @@ def convert(request):
         result = converter.convert(text)
 
         try:
-            History.objects.create(input=text, output=result, mode=mode)
+            if not request.session.session_key:
+                request.session.create()
+            current_session = request.session.session_key
+
+            History.objects.create(
+                input=text,
+                output=result,
+                mode=mode,
+                session_key=current_session
+            )
         except Exception as db_err:
             print(f"保存历史记录失败: {db_err}")
 
@@ -61,12 +70,21 @@ def convert(request):
         return JsonResponse({"code": 500, "msg": f"服务异常: {str(e)}", "result": ""})
 
 def historyUI(request):
-    s2t_datas = History.objects.filter(mode='s2t').order_by('-create_time')
-    t2s_datas = History.objects.filter(mode='t2s').order_by('-create_time')
+    current_session = request.session.session_key
+
+    if not current_session:
+        s2t_datas = []
+        t2s_datas = []
+    else:
+        s2t_datas = History.objects.filter(mode='s2t', session_key=current_session).order_by('-create_time')
+        t2s_datas = History.objects.filter(mode='t2s', session_key=current_session).order_by('-create_time')
     context = {'s2t_datas': s2t_datas, 't2s_datas': t2s_datas}
     return render(request, 'jianfanHistoryList.html', context=context)
 
 def delete_history(request):
     if request.method == "POST":
-        History.objects.all().delete()
+        current_session = request.session.session_key
+        if current_session:
+            # 只删自己的
+            History.objects.filter(session_key=current_session).delete()
     return redirect("jianfan22:historyUI")

@@ -45,13 +45,16 @@ def convert(request):
     action = request.GET.get("action", "")
     if not char:
         return JsonResponse({"code": 400, "msg": "请输入汉字"})
-
+    if not request.session.session_key:
+        request.session.create()
+    current_session = request.session.session_key
     # ==== 基于历史记录计算“上一个 / 下一个” ====
     switched = False
     if action in ("prev", "next"):
         # 每个字按“最近一次查询时间”排序去重（最旧 -> 最新）
         rows = (
             History.objects
+            .filter(session_key=current_session)  # <--- 加上这行
             .values("char")
             .annotate(last_time=Max("create_time"))
             .order_by("last_time")
@@ -119,7 +122,8 @@ def convert(request):
     if action not in ("prev", "next"):
         History.objects.create(
             char=char,
-            info=json.dumps(info, ensure_ascii=False)
+            info=json.dumps(info, ensure_ascii=False),
+            session_key = current_session
         )
 
     return JsonResponse({
@@ -131,7 +135,12 @@ def convert(request):
     })
 
 def historyUI(request):
-    datas = History.objects.all().order_by('-create_time')
+    current_session = request.session.session_key
+    if current_session:
+        datas = History.objects.filter(session_key=current_session).order_by('-create_time')
+    else:
+        datas = []
+
     font_dir = os.path.join(settings.BASE_DIR, 'static', 'font')
     # 遍历每一条记录，解析字典，并查找字体
     for data in datas:
@@ -159,7 +168,10 @@ def historyUI(request):
 
 def delete_history(request):
     if request.method == "POST":
-        History.objects.all().delete()
+        current_session = request.session.session_key
+        if current_session:
+            # 只删自己的
+            History.objects.filter(session_key=current_session).delete()
     return redirect("xiaozhuan22:historyUI")
 
 # 批量导出小篆字形到 Word 文档

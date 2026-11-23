@@ -6,6 +6,7 @@ class History(models.Model):
     output = models.CharField(max_length=200, verbose_name="输出内容")
     mode = models.CharField(max_length=10, default='s2t')
     create_time = models.DateTimeField(auto_now_add=True, verbose_name="查询时间")
+    session_key = models.CharField(max_length=40, null=True, blank=True, verbose_name="用户会话标识")
 
     class Meta:
         verbose_name = "简繁转换记录"
